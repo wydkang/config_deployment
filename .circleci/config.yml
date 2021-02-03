@@ -1,14 +1,36 @@
 version: 2.1
 
 orbs:
-  aws-code-deploy: circleci/aws-code-deploy@0.0.11
+  heroku: circleci/heroku@0.0.10 # Invoke the Heroku orb
 
 workflows:
-  deploy_application:
+  heroku_deploy:
     jobs:
-      - aws-code-deploy/deploy:
-          application-name: myApplication
-          deployment-group: myDeploymentGroup
-          service-role-arn: myDeploymentGroupRoleARN
-          bundle-bucket: myApplicationS3Bucket
-          bundle-key: myS3BucketKey
+      - build
+      - heroku/deploy-via-git: # Use the pre-configured job, deploy-via-git
+          requires:
+            - build
+          filters:
+            branches:
+              only: sequential-branch-filter
+jobs:
+  build:
+    docker:
+      - image: circleci/ruby:2.4-node
+        auth:
+          username: mydockerhub-user
+          password: $DOCKERHUB_PASSWORD  # context / project UI env-var reference
+      - image: circleci/postgres:9.4.12-alpine
+        auth:
+          username: mydockerhub-user
+          password: $DOCKERHUB_PASSWORD  # context / project UI env-var reference
+    working_directory: ~/circleci-demo-workflows
+    steps:
+      - checkout
+      # Bundle install dependencies
+      - run: bundle install --path vendor/bundle
+      # Database setup
+      - run: bundle exec rake db:create db:schema:load
+      - run:
+          name: Run tests
+          command: rake
